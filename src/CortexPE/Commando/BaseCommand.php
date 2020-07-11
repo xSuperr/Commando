@@ -30,8 +30,8 @@ declare(strict_types=1);
 namespace CortexPE\Commando;
 
 
+use CortexPE\Commando\args\BaseArgument;
 use CortexPE\Commando\constraint\BaseConstraint;
-use CortexPE\Commando\exception\InvalidErrorCode;
 use CortexPE\Commando\traits\ArgumentableTrait;
 use CortexPE\Commando\traits\IArgumentable;
 use pocketmine\command\Command;
@@ -39,12 +39,20 @@ use pocketmine\command\CommandSender;
 use pocketmine\command\PluginIdentifiableCommand;
 use pocketmine\plugin\Plugin;
 use pocketmine\utils\TextFormat;
+use function array_map;
 use function array_shift;
+use function array_slice;
 use function array_unique;
 use function array_unshift;
 use function count;
-use function dechex;
-use function str_replace;
+use function explode;
+use function floor;
+use function implode;
+use function is_bool;
+use function is_float;
+use function is_int;
+use function str_repeat;
+use function strlen;
 
 abstract class BaseCommand extends Command implements IArgumentable, IRunnable, PluginIdentifiableCommand {
 	use ArgumentableTrait;
@@ -54,15 +62,6 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 	public const ERR_INSUFFICIENT_ARGUMENTS = 0x03;
 	public const ERR_NO_ARGUMENTS = 0x04;
 	public const ERR_INVALID_ARGUMENTS = 0x05;
-
-	/** @var string[] */
-	protected $errorMessages = [
-		self::ERR_INVALID_ARG_VALUE => TextFormat::RED . "Invalid value '{value}' for argument #{position}. Expecting: {expected}.",
-		self::ERR_TOO_MANY_ARGUMENTS => TextFormat::RED . "Too many arguments given.",
-		self::ERR_INSUFFICIENT_ARGUMENTS => TextFormat::RED . "Insufficient number of arguments given.",
-		self::ERR_NO_ARGUMENTS => TextFormat::RED . "No arguments are required for this command.",
-		self::ERR_INVALID_ARGUMENTS => TextFormat::RED . "Invalid arguments supplied.",
-	];
 
 	/** @var CommandSender */
 	protected $currentSender;
@@ -111,7 +110,7 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 
 			$passArgs = $this->attemptArgumentParsing($cmd, $args);
 		} elseif($this->hasRequiredArguments()){
-			$this->sendError(self::ERR_INSUFFICIENT_ARGUMENTS);
+			$this->sendError(self::ERR_INSUFFICIENT_ARGUMENTS, [], 0);
 			return;
 		}
 		if($passArgs !== null) {
@@ -135,7 +134,7 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 		$dat = $ctx->parseArguments($args, $this->currentSender);
 		if(!empty(($errors = $dat["errors"]))) {
 			foreach($errors as $error) {
-				$this->sendError($error["code"], $error["data"]);
+				$this->sendError($error["code"], ...$error["data"]);
 			}
 
 			return null;
@@ -150,27 +149,57 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 		$this->currentSender->sendMessage(TextFormat::RED . "Usage: " . $this->getUsage());
 	}
 
-	public function sendError(int $errorCode, array $args = []): void {
-		$str = $this->errorMessages[$errorCode];
-		foreach($args as $item => $value) {
-			$str = str_replace("{{$item}}", $value, $str);
-		}
-		$this->currentSender->sendMessage($str);
-		$this->sendUsage();
-	}
+    public function sendError(int $errorCode, array $rawArgs, int $argIndex): void
+    {
+        $correct = implode(" ", array_slice($rawArgs, 0, $argIndex));
+        $correct = $correct !== "" ? $correct . " " : $correct;
+        $correctLength = 1 + strlen($this->getName()) + strlen($correct);
 
-	public function setErrorFormat(int $errorCode, string $format): void {
-		if(!isset($this->errorMessages[$errorCode])) {
-			throw new InvalidErrorCode("Invalid error code 0x" . dechex($errorCode));
-		}
-		$this->errorMessages[$errorCode] = $format;
-	}
+        $sender = $this->currentSender;
+        switch ($errorCode) {
+            case self::ERR_INVALID_ARG_VALUE:
+                $incorrect = $rawArgs[$argIndex];
+                $rawArgs[$argIndex] = TextFormat::YELLOW . $incorrect . TextFormat::RED;
 
-	public function setErrorFormats(array $errorFormats): void {
-		foreach($errorFormats as $errorCode => $format) {
-			$this->setErrorFormat($errorCode, $format);
-		}
-	}
+                $expectedTypes = array_map(static function(BaseArgument $argument) : string{
+                    return $argument->getTypeName();
+                }, $this->argumentList[$argIndex]);
+                if(count($expectedTypes) === 1){
+                    $expectedTypes[0] = ($expectedTypes[0] === "int" ? "an " : "a ") . $expectedTypes[0];
+                }
+
+                if(is_bool($incorrect)){
+                    $givenType = "a bool";
+                }elseif(is_float($incorrect)){
+                    $givenType = "a float";
+                }elseif(is_int($incorrect)){
+                    $givenType = "an int";
+                }else{
+                    $givenType = "a string";
+                }
+
+                $sender->sendMessage(TextFormat::RED . "/" . $this->getName() . " " . implode(" ", $rawArgs));
+                $sender->sendMessage(TextFormat::YELLOW . str_repeat(" ", (int)($correctLength + floor(strlen($incorrect) / 2))) . "^");
+                $sender->sendMessage(TextFormat::RED . "Command expected argument " . ($argIndex + 1) . " to be " . (count($expectedTypes) === 1 ? $expectedTypes[0] : "one of " . implode(", ", $expectedTypes)) . " but " . $givenType . " was given.");
+                break;
+            case self::ERR_TOO_MANY_ARGUMENTS:
+            case self::ERR_NO_ARGUMENTS:
+                $incorrect = array_slice($rawArgs, $argIndex);
+                $incorrectLength = strlen(implode(" ", $incorrect));
+
+                $sender->sendMessage(TextFormat::RED . "/" . $this->getName() . " " . $correct . TextFormat::YELLOW . implode(" ", $incorrect));
+                $sender->sendMessage(TextFormat::YELLOW . str_repeat(" ", (int)($correctLength + floor($incorrectLength / 2))) . "^");
+                $sender->sendMessage(TextFormat::RED . "Command expected " . count($this->argumentList) . " arguments, " . count($rawArgs) . " given.");
+                break;
+            case self::ERR_INSUFFICIENT_ARGUMENTS:
+                $incorrect = implode(" ", array_slice(explode(" ", $this->getUsage()), $argIndex + 1));
+
+                $sender->sendMessage(TextFormat::RED . "/" . $this->getName() . " " . $correct . TextFormat::YELLOW . $incorrect);
+                $sender->sendMessage(TextFormat::YELLOW . str_repeat(" ", (int)($correctLength + floor(strlen($incorrect) / 2))) . "^");
+                $sender->sendMessage(TextFormat::RED . "Command expected " . count($this->argumentList) . " arguments, " . count($rawArgs) . " given.");
+                break;
+        }
+    }
 
 	public function registerSubCommand(BaseSubCommand $subCommand): void {
 		$keys = $subCommand->getAliases();

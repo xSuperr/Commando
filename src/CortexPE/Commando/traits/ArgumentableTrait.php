@@ -92,7 +92,7 @@ trait ArgumentableTrait {
 		if(!$this->hasArguments() && count($rawArgs) > 0) { // doesnt take args but sender gives args anyways
 			$return["errors"][] = [
 				"code" => BaseCommand::ERR_NO_ARGUMENTS,
-				"data" => []
+				"data" => [$rawArgs, 0]
 			];
 		}
 		$offset = 0;
@@ -136,19 +136,9 @@ trait ArgumentableTrait {
 					}
 				}
 				if(!$parsed && !($optional && empty($arg))) { // we tried every other possible argument type, none was satisfied
-					$expectedArgs = $this->argumentList[$offset];
-					$expected = "";
-					foreach($expectedArgs as $expectedArg){
-						$expected .=  $expectedArg->getTypeName() . "|";
-					}
-
 					$return["errors"][] = [
 						"code" => BaseCommand::ERR_INVALID_ARG_VALUE,
-						"data" => [
-							"value" => $rawArgs[$offset] ?? "",
-							"position" => $pos + 1,
-							"expected" => rtrim($expected, "|")
-						]
+						"data" => [$rawArgs, $offset]
 					];
 
 					return $return; // let's break it here.
@@ -158,13 +148,13 @@ trait ArgumentableTrait {
 		if($offset < count($rawArgs)) { // this means that the arguments our user sent is more than the needed amount
 			$return["errors"][] = [
 				"code" => BaseCommand::ERR_TOO_MANY_ARGUMENTS,
-				"data" => []
+				"data" => [$rawArgs, $offset]
 			];
 		}
 		if($required > 0) {// We still have more unfilled required arguments
 			$return["errors"][] = [
 				"code" => BaseCommand::ERR_INSUFFICIENT_ARGUMENTS,
-				"data" => []
+				"data" => [$rawArgs, $required]
 			];
 		}
 
@@ -181,7 +171,7 @@ trait ArgumentableTrait {
 
 			$return["errors"][] = [
 				"code" => BaseCommand::ERR_INVALID_ARGUMENTS,
-				"data" => []
+				"data" => [$rawArgs, $offset]
 			];
 		}
 
