@@ -1,7 +1,7 @@
 <?php
 
 /***
- *    ___                                          _
+ *	___										  _
  *   / __\___  _ __ ___  _ __ ___   __ _ _ __   __| | ___
  *  / /  / _ \| '_ ` _ \| '_ ` _ \ / _` | '_ \ / _` |/ _ \
  * / /__| (_) | | | | | | | | | | | (_| | | | | (_| | (_) |
@@ -29,7 +29,6 @@ declare(strict_types=1);
 
 namespace CortexPE\Commando;
 
-
 use CortexPE\Commando\exception\HookAlreadyRegistered;
 use CortexPE\Commando\store\SoftEnumStore;
 use CortexPE\Commando\traits\IArgumentable;
@@ -50,10 +49,10 @@ use function count;
 
 class PacketHooker implements Listener {
 	/** @var bool */
-	private static $isRegistered = false;
+	private static bool $isRegistered = false;
 
 	/** @var bool */
-	private static $isIntercepting = false;
+	private static bool $isIntercepting = false;
 
 	public static function isRegistered(): bool {
 		return self::$isRegistered;
@@ -84,6 +83,8 @@ class PacketHooker implements Listener {
 			self::$isIntercepting = false;
 			return false;
 		});
+		
+		self::$isRegistered = true;
 	}
 
 	/**
@@ -92,7 +93,7 @@ class PacketHooker implements Listener {
 	 *
 	 * @return CommandOverload[]
 	 */
-	public static function generateOverloads(CommandSender $cs, BaseCommand $command): array {
+	private static function generateOverloads(CommandSender $cs, BaseCommand $command): array {
 		$overloads = [];
 
 		foreach($command->getSubCommands() as $label => $subCommand) {
@@ -140,31 +141,31 @@ class PacketHooker implements Listener {
 		foreach($input as $k => $charList){
 			$indexes[$k] = 0;
 		}
-        do {
-            /** @var CommandParameter[] $set */
-            $set = [];
-            foreach($indexes as $k => $index){
-               	$param = $set[$k] = clone $input[$k][$index]->getNetworkParameterData();
-		    
-                if (isset($param->enum) && $param->enum instanceof CommandEnum) {
-                    $refClass = new ReflectionClass(CommandEnum::class);
-                    $refProp = $refClass->getProperty("enumName");
-                    $refProp->setAccessible(true);
-                    $refProp->setValue($param->enum, "enum#" . spl_object_id($param->enum));
-                }
-            }
-            $combinations[] =  new CommandOverload(false, $set);
+		do {
+			/** @var CommandParameter[] $set */
+			$set = [];
+			foreach($indexes as $k => $index){
+			   	$param = $set[$k] = clone $input[$k][$index]->getNetworkParameterData();
+			
+				if (isset($param->enum) && $param->enum instanceof CommandEnum) {
+					$refClass = new ReflectionClass(CommandEnum::class);
+					$refProp = $refClass->getProperty("enumName");
+					$refProp->setAccessible(true);
+					$refProp->setValue($param->enum, "enum#" . spl_object_id($param->enum));
+				}
+			}
+			$combinations[] =  new CommandOverload(false, $set);
 
-            foreach($indexes as $k => $v){
-                $indexes[$k]++;
-                $lim = count($input[$k]);
-                if($indexes[$k] >= $lim){
-                    $indexes[$k] = 0;
-                    continue;
-                }
-                break;
-            }
-        } while(count($combinations) !== $outputLength);
+			foreach($indexes as $k => $v){
+				$indexes[$k]++;
+				$lim = count($input[$k]);
+				if($indexes[$k] >= $lim){
+					$indexes[$k] = 0;
+					continue;
+				}
+				break;
+			}
+		} while(count($combinations) !== $outputLength);
 
 		return $combinations;
 	}
