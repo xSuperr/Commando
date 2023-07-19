@@ -74,10 +74,10 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 	private array $constraints = [];
 
 	/** @var Plugin */
-	private Plugin $plugin;
+	protected Plugin $plugin;
 
 	public function __construct(
-		PluginBase $plugin,
+		Plugin $plugin,
 		string $name,
 		Translatable|string $description = "",
 		array $aliases = []
