@@ -35,7 +35,7 @@ use function trim;
 
 abstract class BaseSubCommand extends BaseCommand{
 	/** @var BaseCommand */
-	protected BaseCommand $parent;
+	protected ?BaseCommand $parent = null;
 
 	public function __construct(PluginBase $plugin, string $name, string $description = "", array $aliases = []){
 		parent::__construct($plugin, $name, $description, $aliases);
